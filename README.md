@@ -34,30 +34,6 @@ Important localization facts
 - BLE packet arrival time is not the acoustic arrival time. BLE transports metadata/recordings; estimate sound delays from the recorded audio or rigorously calibrated acquisition timestamps.
 - Independent audio sample clocks, microphone response delays, echoes, wind, terrain, and low signal-to-noise ratio can bias TDOA estimates.
 - A sound classifier predicts a label. It does not prove that a gunshot occurred or that a call belongs to a particular species. Measure false positives and retain an unknown class.
-Repository layout
-.
-├── README.md
-├── LICENSE
-├── CONTRIBUTING.md
-├── .gitignore
-├── hardware/
-│   ├── BOM.csv
-│   └── README.md
-├── firmware/
-│   └── README.md
-├── ml/
-│   └── README.md
-├── gateway/
-│   ├── README.md
-│   └── localize_tdoa.py
-├── examples/
-│   └── synthetic_arrivals.json
-└── docs/
-    ├── architecture.md
-    ├── localization.md
-    ├── predictive-maintenance.md
-    └── validation-plan.md
-Gateway TDOA solver (synthetic/test measurements)
 The included Python script estimates a 2D source position from sensor coordinates and measured arrival times. It does not extract delays from audio yet, and the included example is synthetic.
 
 Requires Python 3.10+ and NumPy/SciPy:
