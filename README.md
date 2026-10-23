@@ -36,9 +36,6 @@ Important localization facts
 - A sound classifier predicts a label. It does not prove that a gunshot occurred or that a call belongs to a particular species. Measure false positives and retain an unknown class.
 The included Python script estimates a 2D source position from sensor coordinates and measured arrival times. It does not extract delays from audio yet, and the included example is synthetic.
 
-Requires Python 3.10+ and NumPy/SciPy:
-python -m pip install numpy scipy
-python gateway/localize_tdoa.py examples/synthetic_arrivals.json
 Input fields use local Cartesian coordinates in metres and arrival times in seconds. The script assumes a uniform speed of sound and a common timing reference. Real recordings require timestamp/sample-rate calibration and an audio cross-correlation stage; see [`gateway/README.md`](gateway/README.md).
 Planned milestones
 - [ ] Confirm DK revision/target and establish a supported nRF Connect SDK toolchain.
