@@ -1,0 +1,675 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Forest Acoustic Locator</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chivo:wght@600;800&family=JetBrains+Mono:wght@400;600&family=Source+Sans+3:wght@400;600&display=swap">
+<style>
+/* Layout: one column page, live simulator first (map + readout side by side on wide screens),
+   then explainer sections. Field-notebook feel: mono for data, grotesque for headings. */
+:root {
+  --bg: #eef2ee;
+  --surface: #ffffff;
+  --surface2: #e3eae4;
+  --map: #f6f9f6;
+  --tree: #d3e0d6;
+  --grid: #d9e3db;
+  --fg: #13201a;
+  --muted: #4f6158;
+  --line: #c6d3c9;
+  --node: #0b7a67;
+  --event: #d9480f;
+  --est: #1d4ed8;
+  --good: #1a7f37;
+  --warn: #a15c00;
+  --bad: #c0262d;
+  --h1: #b45309; --h2: #7c3aed; --h3: #0e7490; --h4: #be185d; --h5: #4d7c0f;
+  --font-head: "Chivo", "Arial Black", system-ui, sans-serif;
+  --font-body: "Source Sans 3", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0d1411; --surface: #141d18; --surface2: #1b2821; --map: #0f1813; --tree: #1b2b22; --grid: #1c2a22;
+    --fg: #e3ebe6; --muted: #98aba1; --line: #2a3a31;
+    --node: #3fd0b0; --event: #ff8a4c; --est: #7cb2ff;
+    --good: #4cc26e; --warn: #f0b24a; --bad: #ff7b7f;
+    --h1: #f59e0b; --h2: #a78bfa; --h3: #22d3ee; --h4: #f472b6; --h5: #a3e635;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0d1411; --surface: #141d18; --surface2: #1b2821; --map: #0f1813; --tree: #1b2b22; --grid: #1c2a22;
+  --fg: #e3ebe6; --muted: #98aba1; --line: #2a3a31;
+  --node: #3fd0b0; --event: #ff8a4c; --est: #7cb2ff;
+  --good: #4cc26e; --warn: #f0b24a; --bad: #ff7b7f;
+  --h1: #f59e0b; --h2: #a78bfa; --h3: #22d3ee; --h4: #f472b6; --h5: #a3e635;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--fg);
+  font-family: var(--font-body); font-size: 17px; line-height: 1.55;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 28px 64px;
+}
+.wrap { max-width: 1120px; margin: 0 auto; display: flex; flex-direction: column; gap: 56px; }
+h1, h2, h3 { font-family: var(--font-head); line-height: 1.12; text-wrap: balance; margin: 0; }
+h1 { font-size: clamp(2rem, 5vw, 3.4rem); font-weight: 800; letter-spacing: -0.02em; }
+h2 { font-size: clamp(1.4rem, 3vw, 1.9rem); font-weight: 800; letter-spacing: -0.01em; }
+h3 { font-size: 1.05rem; font-weight: 600; }
+p { margin: 0; max-width: 68ch; }
+code, .mono { font-family: var(--font-mono); font-size: 0.88em; }
+.label { font-family: var(--font-mono); font-size: 0.74rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+
+/* header */
+.head { display: grid; gap: 22px; }
+.head .pitch { font-size: 1.15rem; color: var(--fg); max-width: 62ch; }
+.facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px; }
+.fact { border-top: 2px solid var(--node); padding-top: 8px; }
+.fact b { font-family: var(--font-mono); font-size: 1.35rem; font-weight: 600; display: block; }
+.fact span { color: var(--muted); font-size: 0.95rem; }
+
+/* simulator */
+.sim { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr); gap: 20px; align-items: start; }
+@media (max-width: 900px) { .sim { grid-template-columns: minmax(0, 1fr); } }
+.mapbox { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.hint { font-size: 0.95rem; color: var(--muted); }
+.canvaswrap { border: 1px solid var(--line); border-radius: 6px; overflow: hidden; background: var(--map); }
+canvas { display: block; width: 100%; aspect-ratio: 1 / 1; touch-action: none; cursor: crosshair; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 0.88rem; color: var(--muted); }
+.legend i { display: inline-block; width: 11px; height: 11px; margin-right: 6px; vertical-align: -1px; }
+.panel { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 14px 16px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.ctl { display: grid; gap: 6px; }
+.ctl .row { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.ctl output { font-family: var(--font-mono); font-size: 0.85rem; color: var(--fg); }
+input[type=range] { width: 100%; accent-color: var(--node); }
+.seg { display: flex; flex-wrap: wrap; gap: 6px; }
+.seg button, .btn, select {
+  font: inherit; font-size: 0.92rem; color: var(--fg); background: var(--surface2);
+  border: 1px solid var(--line); border-radius: 4px; padding: 6px 12px; cursor: pointer;
+}
+.seg button[aria-pressed="true"] { background: var(--node); border-color: var(--node); color: var(--surface); font-weight: 600; }
+.btn:hover, .seg button:hover, select:hover { border-color: var(--node); }
+:focus-visible { outline: 2px solid var(--est); outline-offset: 2px; }
+.readout { display: grid; grid-template-columns: auto 1fr; gap: 4px 14px; font-family: var(--font-mono); font-size: 0.86rem; }
+.readout dt { color: var(--muted); }
+.readout dd { margin: 0; text-align: right; }
+.errval { font-weight: 600; }
+.errval.good { color: var(--good); } .errval.warn { color: var(--warn); } .errval.bad { color: var(--bad); }
+.tablewrap { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-family: var(--font-mono); font-size: 0.82rem; font-variant-numeric: tabular-nums; }
+th { text-align: left; font-weight: 400; color: var(--muted); padding: 4px 8px 4px 0; border-bottom: 1px solid var(--line); white-space: nowrap; }
+td { padding: 4px 8px 4px 0; white-space: nowrap; }
+td:first-child { font-weight: 600; }
+.notes { display: grid; gap: 6px; font-size: 0.92rem; }
+.notes p { padding-left: 10px; border-left: 3px solid var(--warn); }
+.notes p.info { border-left-color: var(--est); }
+
+/* sections */
+.section { display: grid; gap: 18px; }
+.steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 14px; counter-reset: s; }
+.step { background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 14px 16px; display: grid; gap: 8px; align-content: start; }
+.step .n { font-family: var(--font-mono); color: var(--node); font-size: 0.8rem; letter-spacing: 0.08em; }
+.step p { font-size: 0.95rem; color: var(--muted); }
+.twocol { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 18px; }
+.math { background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 14px 16px; font-family: var(--font-mono); font-size: 0.88rem; display: grid; gap: 8px; overflow-x: auto; }
+.math div { white-space: nowrap; }
+.math .c { color: var(--muted); white-space: normal; font-family: var(--font-body); font-size: 0.92rem; }
+.parts { display: grid; grid-template-columns: minmax(120px, 0.7fr) minmax(0, 2fr); gap: 0; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); overflow: hidden; }
+.parts > div { padding: 10px 14px; border-bottom: 1px solid var(--line); font-size: 0.95rem; min-width: 0; }
+.parts > div:nth-last-child(-n+2) { border-bottom: 0; }
+.parts > div:nth-child(odd) { font-family: var(--font-mono); font-size: 0.82rem; color: var(--muted); background: var(--surface2); }
+pre { margin: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 12px 14px; overflow-x: auto; font-family: var(--font-mono); font-size: 0.82rem; line-height: 1.5; }
+.risks { display: grid; grid-template-columns: repeat(auto-fit, minmax(290px, 1fr)); gap: 14px; }
+.risk { border-left: 3px solid var(--h1); padding: 2px 0 2px 14px; display: grid; gap: 4px; }
+.risk p { font-size: 0.95rem; color: var(--muted); }
+.phases { display: grid; gap: 0; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); }
+.phase { display: grid; grid-template-columns: 110px minmax(0, 1fr); gap: 4px 16px; padding: 12px 16px; border-bottom: 1px solid var(--line); }
+.phase:last-child { border-bottom: 0; }
+.phase .label { padding-top: 3px; }
+.phase p { font-size: 0.95rem; }
+@media (max-width: 520px) { .phase { grid-template-columns: minmax(0, 1fr); } .parts { grid-template-columns: minmax(0, 1fr); } .parts > div:nth-child(odd) { border-bottom: 0; padding-bottom: 2px; } .parts > div:nth-last-child(-n+2) { border-bottom: 1px solid var(--line); } .parts > div:last-child { border-bottom: 0; } }
+footer { color: var(--muted); font-size: 0.88rem; }
+</style>
+
+<div class="wrap">
+
+  <header class="head">
+    <span class="label">Project concept · acoustic localisation with nRF52840</span>
+    <h1>Forest Acoustic Locator</h1>
+    <p class="pitch">GPS in reverse. Satellites at known positions let your phone find itself from signal delays. Here, microphone nodes at known positions in a forest find a sound from its delays: a gunshot, a chainsaw, or the call of a rare animal.</p>
+    <div class="facts">
+      <div class="fact"><b>343 m/s</b><span>Speed of sound in air at 20 °C, slow enough to time with a microcontroller.</span></div>
+      <div class="fact"><b>1 ms = 34 cm</b><span>Each millisecond of timing error moves the answer about a third of a metre.</span></div>
+      <div class="fact"><b>3 nodes minimum</b><span>Three fix a position on the map. Four or more remove ambiguity and average out noise.</span></div>
+    </div>
+  </header>
+
+  <section class="section" aria-labelledby="simh">
+    <h2 id="simh">Try it: make a sound in the forest</h2>
+    <div class="sim">
+      <div class="mapbox">
+        <p class="hint">Click anywhere on the map to fire a sound. Drag a node to move it. The map is 2 km × 2 km; the example sound is already placed.</p>
+        <div class="canvaswrap"><canvas id="map" width="640" height="640" role="img" aria-label="Map of a 2 kilometre forest square with microphone nodes, a sound source and the position estimated from arrival times"></canvas></div>
+        <div class="legend" aria-hidden="true">
+          <span><i style="background:var(--node);border-radius:2px"></i>Node (known position)</span>
+          <span><i style="background:var(--event);border-radius:50%"></i>Real sound position</span>
+          <span><i style="border:2px solid var(--est);border-radius:50%"></i>Estimated position</span>
+          <span><i style="background:var(--h2);height:3px;margin-bottom:3px"></i>Time-difference curve</span>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="card">
+          <div class="ctl">
+            <span class="label">Number of nodes</span>
+            <div class="seg" id="nseg" role="group" aria-label="Number of nodes">
+              <button type="button" data-n="3" aria-pressed="false">3</button>
+              <button type="button" data-n="4" aria-pressed="true">4</button>
+              <button type="button" data-n="5" aria-pressed="false">5</button>
+              <button type="button" data-n="6" aria-pressed="false">6</button>
+            </div>
+          </div>
+          <div class="ctl">
+            <span class="label">Kind of sound</span>
+            <div class="seg" id="kseg" role="group" aria-label="Kind of sound">
+              <button type="button" data-k="gun" aria-pressed="true">Gunshot</button>
+              <button type="button" data-k="call" aria-pressed="false">Animal call</button>
+            </div>
+          </div>
+          <div class="ctl">
+            <div class="row"><label class="label" for="sigma">Timing error per node</label><output id="sigmaOut" for="sigma">0.3 ms</output></div>
+            <input type="range" id="sigma" min="0" max="20" step="0.1" value="0.3">
+          </div>
+          <div class="ctl">
+            <div class="row"><label class="label" for="mis">Speed-of-sound mismatch</label><output id="misOut" for="mis">0.0 %</output></div>
+            <input type="range" id="mis" min="-3" max="3" step="0.1" value="0">
+          </div>
+          <div class="ctl">
+            <div class="row"><label class="label" for="spd">Playback speed</label>
+              <select id="spd"><option value="1">1× real time</option><option value="3" selected>3×</option><option value="8">8×</option></select>
+            </div>
+          </div>
+          <button type="button" class="btn" id="replay">Replay this sound with new timing noise</button>
+        </div>
+
+        <div class="card">
+          <dl class="readout">
+            <dt>Real position</dt><dd id="rTrue">…</dd>
+            <dt>Estimated position</dt><dd id="rEst">…</dd>
+            <dt>Error</dt><dd><span id="rErr" class="errval">…</span></dd>
+          </dl>
+          <div class="tablewrap">
+            <table>
+              <thead><tr><th>Node</th><th>Distance</th><th>Heard at</th><th>After first</th></tr></thead>
+              <tbody id="rows"></tbody>
+            </table>
+          </div>
+          <div class="notes" id="notes"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" aria-labelledby="howh">
+    <h2 id="howh">How the system works</h2>
+    <div class="steps">
+      <div class="step"><span class="n">STEP 1 · LISTEN</span><h3>Nodes hear the sound</h3><p>Each node samples a MEMS microphone at 16 kHz. A cheap detector runs all the time: a loudness spike for gunshots, a small neural network on the spectrogram for animal calls.</p></div>
+      <div class="step"><span class="n">STEP 2 · TIME-STAMP</span><h3>Record exact arrival time</h3><p>A GPS receiver gives every node the same clock through its 1-pulse-per-second signal. The nRF52840 timer captures that pulse, so the sound's arrival is timed to about 0.1 ms.</p></div>
+      <div class="step"><span class="n">STEP 3 · REPORT</span><h3>Send a tiny packet</h3><p>Only about 16 bytes leave the node: ID, timestamp, loudness, class and confidence. A long-range radio carries it to a gateway. No audio is streamed, so batteries last.</p></div>
+      <div class="step"><span class="n">STEP 4 · SOLVE</span><h3>Gateway computes the location</h3><p>Reports that arrive within a few seconds of each other are grouped. The solver finds the point whose distances to the nodes fit the timing differences, then sends an alert with coordinates.</p></div>
+    </div>
+  </section>
+
+  <section class="section" aria-labelledby="mathh">
+    <h2 id="mathh">The maths behind the map</h2>
+    <div class="twocol">
+      <div style="display:grid;gap:12px;align-content:start">
+        <p>The sound leaves an unknown place at an unknown moment. Every node knows only when it heard the sound. Subtracting one arrival time from another cancels the unknown moment and leaves a pure distance difference.</p>
+        <p>One pair of nodes gives a hyperbola: every point whose distances to the two nodes differ by that amount. A second pair gives a second curve. The sound is where they cross, which is what the coloured curves in the simulator show.</p>
+        <p>With exactly three nodes the curves can cross twice, so the answer is sometimes ambiguous (the simulator shows a dashed ghost when this happens). A fourth node settles it, and more nodes let the solver average out timing noise.</p>
+      </div>
+      <div class="math" aria-label="Equations">
+        <div>d<sub>i</sub> = | p − n<sub>i</sub> |</div>
+        <div class="c">Distance from the unknown source p to node i at known position n<sub>i</sub>.</div>
+        <div>t<sub>i</sub> = t<sub>0</sub> + d<sub>i</sub> / c</div>
+        <div class="c">Node i hears the sound after the unknown emission time t<sub>0</sub> plus the travel time.</div>
+        <div>d<sub>i</sub> − d<sub>j</sub> = c · (t<sub>i</sub> − t<sub>j</sub>)</div>
+        <div class="c">Subtract two nodes: t<sub>0</sub> disappears and one hyperbola remains.</div>
+        <div>c ≈ 331.3 + 0.606 · T<sub>°C</sub> m/s</div>
+        <div class="c">Each node carries a temperature sensor, because a 6 °C error in air temperature shifts c by about 1% and the whole map with it.</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" aria-labelledby="hwh">
+    <h2 id="hwh">What goes in each node</h2>
+    <div class="twocol">
+      <div class="parts">
+        <div>MCU</div><div>nRF52840 (Cortex-M4F, 64 MHz). Has a PDM microphone interface, 16 MHz timers with hardware capture (PPI), and a very low-power sleep mode.</div>
+        <div>Microphone</div><div>PDM MEMS microphone with a high acoustic overload point so a close gunshot does not clip, under a foam windscreen.</div>
+        <div>Clock + position</div><div>u-blox GNSS module with a PPS output. It gives the node's own coordinates and a shared time base across the whole forest.</div>
+        <div>Radio</div><div>LoRa transceiver (SX126x) on SPI for kilometre links. The nRF52840's own BLE or Thread radio can cover short hops or setup over a phone.</div>
+        <div>Environment</div><div>Temperature and humidity sensor (BME280 class) for the speed-of-sound correction.</div>
+        <div>Power</div><div>Li-ion cell with a small solar panel, in an IP65 box with a mesh-covered microphone port.</div>
+        <div>Gateway</div><div>One LoRa receiver with a Raspberry Pi or ESP32, running the solver and sending alerts by mobile data or satellite link.</div>
+      </div>
+      <div style="display:grid;gap:12px;align-content:start">
+        <p>The report packet is small enough to send in one LoRa frame:</p>
+        <pre>struct EventReport {      // ~16 bytes
+  uint8_t  node_id;
+  uint32_t gps_second;    // UTC second from GNSS
+  uint32_t ticks_16mhz;   // timer count inside that second
+  uint8_t  sound_class;   // gunshot, chainsaw, call #n
+  uint8_t  confidence;    // 0-255
+  int16_t  peak_dbfs_x10; // loudness
+  int16_t  temp_c_x10;    // for speed of sound
+};</pre>
+        <p>A gunshot has a sharp start, so each node can time it from the first rise in loudness. An animal call fades in gradually, so the first rise is unclear. For calls, nodes send a short audio snippet or spectrogram on request, and the gateway lines the snippets up by cross-correlation (GCC-PHAT). Try the "Animal call" setting in the simulator to see what that larger timing error does.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" aria-labelledby="riskh">
+    <h2 id="riskh">What can go wrong, and the plan for it</h2>
+    <div class="risks">
+      <div class="risk"><h3>Clock agreement</h3><p>Nodes must share time to well under a millisecond. GPS PPS solves this. If a node loses its fix, it can resync from a neighbour's beacon.</p></div>
+      <div class="risk"><h3>Temperature and wind</h3><p>Air temperature changes c; wind pushes sound along. Temperature sensors correct the first; more nodes than the minimum average the second.</p></div>
+      <div class="risk"><h3>Echoes in dense forest</h3><p>Sound bounces off trunks and hillsides. The solver uses only the first arrival and the classifier rejects clips with several similar peaks.</p></div>
+      <div class="risk"><h3>Range and foliage</h3><p>Gunshots carry kilometres; quiet animal calls maybe a few hundred metres. Node spacing should follow the quietest sound you care about.</p></div>
+      <div class="risk"><h3>Poor geometry</h3><p>Sounds inside the area covered by the nodes locate best. Outside, small timing errors stretch into large position errors, as the simulator shows when you click near an edge.</p></div>
+      <div class="risk"><h3>False alarms</h3><p>Thunder and falling branches sound like gunshots. Require two or more nodes to agree on class and arrival times before raising an alert.</p></div>
+    </div>
+  </section>
+
+  <section class="section" aria-labelledby="planh">
+    <h2 id="planh">Build plan</h2>
+    <div class="phases">
+      <div class="phase"><span class="label">Phase 1</span><p><b>Bench and open field.</b> Three nodes on a football pitch at surveyed points. Play a loud click from a speaker at known spots and compare computed with real positions. This gives the real accuracy numbers.</p></div>
+      <div class="phase"><span class="label">Phase 2</span><p><b>Detector.</b> Record gunshot-like sounds (or recordings), chainsaws, rain, wind and target animal calls. Train a small classifier that fits on the nRF52840.</p></div>
+      <div class="phase"><span class="label">Phase 3</span><p><b>Radio and gateway.</b> Add LoRa reports, the gateway solver and a map dashboard with alerts.</p></div>
+      <div class="phase"><span class="label">Phase 4</span><p><b>Forest trial.</b> Solar power, weatherproofing and a few weeks in the field. Measure battery life, false alarms and range.</p></div>
+      <div class="phase"><span class="label">Phase 5</span><p><b>Scale up.</b> Add nodes to widen the area. The same solver handles any number of nodes.</p></div>
+    </div>
+  </section>
+
+  <footer>The simulator uses a made-up 2 km square, a fixed speed of sound of 343 m/s and Gaussian timing noise. Accuracy in a real forest depends on echoes, wind and node layout, and Phase 1 is where those numbers get measured.</footer>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  //SOLVER-START
+  function solveLin3(A, b) {
+    var M = [[A[0][0], A[0][1], A[0][2], b[0]], [A[1][0], A[1][1], A[1][2], b[1]], [A[2][0], A[2][1], A[2][2], b[2]]];
+    for (var i = 0; i < 3; i++) {
+      var p = i;
+      for (var r = i + 1; r < 3; r++) if (Math.abs(M[r][i]) > Math.abs(M[p][i])) p = r;
+      if (Math.abs(M[p][i]) < 1e-12) return null;
+      var tmp = M[i]; M[i] = M[p]; M[p] = tmp;
+      for (var r2 = i + 1; r2 < 3; r2++) {
+        var f = M[r2][i] / M[i][i];
+        for (var k = i; k < 4; k++) M[r2][k] -= f * M[i][k];
+      }
+    }
+    var x = [0, 0, 0];
+    for (var i2 = 2; i2 >= 0; i2--) {
+      var s = M[i2][3];
+      for (var k2 = i2 + 1; k2 < 3; k2++) s -= M[i2][k2] * x[k2];
+      x[i2] = s / M[i2][i2];
+    }
+    return x;
+  }
+  function costOf(ns, m, x, y, T) {
+    var s = 0;
+    for (var i = 0; i < ns.length; i++) {
+      var r = m[i] - T - Math.hypot(x - ns[i].x, y - ns[i].y);
+      s += r * r;
+    }
+    return s;
+  }
+  // Levenberg-Marquardt on unknowns (x, y, T) where T = c * t0 (metres); model: m_i = T + d_i
+  function lm(ns, m, x, y, T) {
+    var lam = 1e-2, c = costOf(ns, m, x, y, T);
+    for (var it = 0; it < 80; it++) {
+      var A = [[0, 0, 0], [0, 0, 0], [0, 0, 0]], g = [0, 0, 0];
+      for (var i = 0; i < ns.length; i++) {
+        var dx = x - ns[i].x, dy = y - ns[i].y, d = Math.max(Math.hypot(dx, dy), 1e-6);
+        var J = [dx / d, dy / d, 1], r = m[i] - T - d;
+        for (var a = 0; a < 3; a++) { g[a] += J[a] * r; for (var b = 0; b < 3; b++) A[a][b] += J[a] * J[b]; }
+      }
+      var improved = false, stepSize = 0;
+      for (var tries = 0; tries < 10; tries++) {
+        var B = [[0, 0, 0], [0, 0, 0], [0, 0, 0]];
+        for (var a2 = 0; a2 < 3; a2++) for (var b2 = 0; b2 < 3; b2++) B[a2][b2] = A[a2][b2] + (a2 === b2 ? lam * (A[a2][a2] || 1) : 0);
+        var dl = solveLin3(B, g);
+        if (!dl) { lam *= 10; continue; }
+        var nc = costOf(ns, m, x + dl[0], y + dl[1], T + dl[2]);
+        if (nc < c) { x += dl[0]; y += dl[1]; T += dl[2]; c = nc; lam = Math.max(lam / 3, 1e-9); improved = true; stepSize = Math.hypot(dl[0], dl[1]); break; }
+        lam *= 4;
+      }
+      if (!improved || stepSize < 1e-4) break;
+    }
+    return { x: x, y: y, T: T, rms: Math.sqrt(c / ns.length) };
+  }
+  // ns: [{x,y}] node positions (m); ts: measured arrival times (s); c: assumed speed of sound; W: map size (m)
+  function solve(ns, ts, c, W) {
+    var m = ts.map(function (v) { return v * c; });
+    var found = [];
+    var fr = [0.1, 0.37, 0.63, 0.9];
+    for (var a = 0; a < fr.length; a++) for (var b = 0; b < fr.length; b++) {
+      var x0 = fr[a] * W, y0 = fr[b] * W, ds = 0, ms = 0;
+      for (var i = 0; i < ns.length; i++) { ds += Math.hypot(x0 - ns[i].x, y0 - ns[i].y); ms += m[i]; }
+      var T0 = (ms - ds) / ns.length;
+      var s = lm(ns, m, x0, y0, T0);
+      if (isFinite(s.x) && isFinite(s.y) && s.x > -0.5 * W && s.x < 1.5 * W && s.y > -0.5 * W && s.y < 1.5 * W) found.push(s);
+    }
+    found.sort(function (p, q) { return p.rms - q.rms; });
+    var uniq = [];
+    found.forEach(function (s) {
+      if (uniq.every(function (u) { return Math.hypot(u.x - s.x, u.y - s.y) > 30; })) uniq.push(s);
+    });
+    if (!uniq.length) return null;
+    var best = uniq[0];
+    var ghosts = uniq.slice(1).filter(function (s) { return s.rms <= best.rms + 1.5 && s.x > -0.1 * W && s.x < 1.1 * W && s.y > -0.1 * W && s.y < 1.1 * W; });
+    return { best: best, ghosts: ghosts };
+  }
+  //SOLVER-END
+
+  var W = 2000, C_TRUE = 343;
+  var canvas = document.getElementById("map"), ctx = canvas.getContext("2d");
+  var NODE_DEFAULT = [[420, 430], [1520, 520], [860, 1560], [1640, 1560], [260, 1420], [980, 140]];
+  var LABELS = "ABCDEF";
+  var N = 4, sigma = 0.3, mis = 0, speed = 3;
+  var nodes = NODE_DEFAULT.map(function (p) { return { x: p[0], y: p[1] }; });
+  var ev = { x: 1120, y: 860 };
+  var z = [0.6, -0.4, 0.9, -0.8, 0.3, -0.2];
+  var phase = "solved", t = 0, tEnd = 0, raf = 0, last = 0, lastHeard = -1;
+  var res = null, calc = null, drag = -1, size = 640, dpr = 1;
+  var reduced = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  // forest texture (deterministic)
+  var trees = [], seed = 7;
+  function rnd() { seed = (seed * 16807) % 2147483647; return seed / 2147483647; }
+  for (var k = 0; k < 260; k++) trees.push([rnd() * W, rnd() * W, 5 + rnd() * 16]);
+
+  function gauss() { var u = 1 - Math.random(), v = Math.random(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v); }
+  function newNoise() { for (var i = 0; i < 6; i++) z[i] = gauss(); }
+
+  function compute() {
+    var d = [], ts = [], ns = nodes.slice(0, N);
+    for (var i = 0; i < N; i++) {
+      d[i] = Math.hypot(ev.x - ns[i].x, ev.y - ns[i].y);
+      ts[i] = d[i] / C_TRUE + (sigma / 1000) * z[i];
+    }
+    var ca = C_TRUE * (1 + mis / 100);
+    var sol = solve(ns, ts, ca, W);
+    var ref = 0;
+    for (var j = 1; j < N; j++) if (ts[j] < ts[ref]) ref = j;
+    calc = { d: d, ts: ts, ca: ca, ref: ref, sol: sol, hull: hull(ns) };
+    tEnd = Math.max.apply(null, d) / C_TRUE + 0.5;
+  }
+
+  function hull(ns) {
+    var p = ns.map(function (a) { return [a.x, a.y]; }).sort(function (a, b) { return a[0] - b[0] || a[1] - b[1]; });
+    if (p.length < 3) return p;
+    function cr(o, a, b) { return (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]); }
+    var lo = [], up = [], i, q;
+    for (i = 0; i < p.length; i++) { q = p[i]; while (lo.length >= 2 && cr(lo[lo.length - 2], lo[lo.length - 1], q) <= 0) lo.pop(); lo.push(q); }
+    for (i = p.length - 1; i >= 0; i--) { q = p[i]; while (up.length >= 2 && cr(up[up.length - 2], up[up.length - 1], q) <= 0) up.pop(); up.push(q); }
+    up.pop(); lo.pop();
+    return lo.concat(up);
+  }
+  function insideHull(h, x, y) {
+    if (h.length < 3) return false;
+    for (var i = 0; i < h.length; i++) {
+      var a = h[i], b = h[(i + 1) % h.length];
+      if ((b[0] - a[0]) * (y - a[1]) - (b[1] - a[1]) * (x - a[0]) < 0) return false;
+    }
+    return true;
+  }
+
+  // ---------- drawing ----------
+  var S = 1;
+  function X(x) { return x * S; }
+  function Y(y) { return size - y * S; }
+  function cv(name) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
+
+  function draw() {
+    var col = {
+      map: cv("--map"), tree: cv("--tree"), grid: cv("--grid"), muted: cv("--muted"), node: cv("--node"),
+      event: cv("--event"), est: cv("--est"), surface: cv("--surface"), fg: cv("--fg"),
+      h: [cv("--h1"), cv("--h2"), cv("--h3"), cv("--h4"), cv("--h5")]
+    };
+    S = size / W;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, size, size);
+    ctx.fillStyle = col.map; ctx.fillRect(0, 0, size, size);
+
+    ctx.fillStyle = col.tree;
+    for (var i = 0; i < trees.length; i++) { ctx.beginPath(); ctx.arc(X(trees[i][0]), Y(trees[i][1]), trees[i][2] * S * 0.8, 0, 6.2832); ctx.fill(); }
+
+    ctx.strokeStyle = col.grid; ctx.lineWidth = 1; ctx.fillStyle = col.muted;
+    ctx.font = "10px " + cv("--font-mono"); ctx.textBaseline = "top";
+    for (var g = 500; g < W; g += 500) {
+      ctx.beginPath(); ctx.moveTo(X(g) + 0.5, 0); ctx.lineTo(X(g) + 0.5, size); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(0, Y(g) + 0.5); ctx.lineTo(size, Y(g) + 0.5); ctx.stroke();
+      ctx.fillText(g + " m", X(g) + 4, 4);
+      ctx.fillText(g + " m", 4, Y(g) + 3);
+    }
+    // scale bar + north
+    ctx.strokeStyle = col.fg; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(12, size - 14); ctx.lineTo(12 + 500 * S, size - 14); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(12, size - 19); ctx.lineTo(12, size - 9); ctx.moveTo(12 + 500 * S, size - 19); ctx.lineTo(12 + 500 * S, size - 9); ctx.stroke();
+    ctx.fillStyle = col.fg; ctx.textBaseline = "bottom"; ctx.fillText("500 m", 16, size - 18);
+    ctx.textBaseline = "top"; ctx.textAlign = "right"; ctx.fillText("N ↑", size - 8, 6); ctx.textAlign = "left";
+
+    // node array shading
+    var h = calc ? calc.hull : hull(nodes.slice(0, N));
+    if (h.length >= 3) {
+      ctx.beginPath();
+      h.forEach(function (p, idx) { if (idx) ctx.lineTo(X(p[0]), Y(p[1])); else ctx.moveTo(X(p[0]), Y(p[1])); });
+      ctx.closePath();
+      ctx.globalAlpha = 0.07; ctx.fillStyle = col.node; ctx.fill();
+      ctx.globalAlpha = 0.5; ctx.strokeStyle = col.node; ctx.lineWidth = 1; ctx.setLineDash([4, 4]); ctx.stroke(); ctx.setLineDash([]);
+      ctx.globalAlpha = 1;
+    }
+
+    var solved = phase === "solved" && calc;
+    var tt = phase === "solved" ? tEnd : t;
+
+    // hyperbolas
+    if (solved) {
+      ctx.save();
+      ctx.beginPath(); ctx.rect(0, 0, size, size); ctx.clip();
+      var ref = calc.ref, pr = nodes[ref], ci = 0;
+      for (var j = 0; j < N; j++) {
+        if (j === ref) continue;
+        var pj = nodes[j];
+        var delta = calc.ca * (calc.ts[j] - calc.ts[ref]);
+        var wx = pr.x - pj.x, wy = pr.y - pj.y, w2 = wx * wx + wy * wy;
+        ctx.strokeStyle = col.h[ci % 5]; ctx.lineWidth = 2; ctx.globalAlpha = 0.85;
+        ci++;
+        if (delta * delta >= w2) continue; // timing inconsistent with this pair
+        var pen = false;
+        ctx.beginPath();
+        for (var a = 0; a <= 720; a++) {
+          var th = a * Math.PI / 360, ux = Math.cos(th), uy = Math.sin(th);
+          var den = 2 * (ux * wx + uy * wy - delta);
+          var r = (delta * delta - w2) / den;
+          if (!isFinite(r) || r <= 0 || r + delta <= 0 || r > 6 * W) { pen = false; continue; }
+          var px = X(pr.x + r * ux), py = Y(pr.y + r * uy);
+          if (pen) ctx.lineTo(px, py); else { ctx.moveTo(px, py); pen = true; }
+        }
+        ctx.stroke();
+      }
+      ctx.restore(); ctx.globalAlpha = 1;
+    }
+
+    // wavefront
+    if (phase === "anim") {
+      var rad = C_TRUE * tt * S;
+      for (var q = 0; q < 3; q++) {
+        var rr = rad - q * 18;
+        if (rr <= 0) continue;
+        ctx.beginPath(); ctx.arc(X(ev.x), Y(ev.y), rr, 0, 6.2832);
+        ctx.strokeStyle = col.event; ctx.globalAlpha = 0.75 - q * 0.25; ctx.lineWidth = 2.5 - q * 0.7; ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+    }
+
+    // nodes
+    for (var n = 0; n < N; n++) {
+      var heard = calc && (phase === "solved" || tt >= calc.d[n] / C_TRUE);
+      var nx = X(nodes[n].x), ny = Y(nodes[n].y);
+      if (heard) {
+        var age = phase === "solved" ? 9 : (tt - calc.d[n] / C_TRUE);
+        var pulse = Math.max(0, 1 - age / 0.6);
+        ctx.beginPath(); ctx.arc(nx, ny, 15 + 22 * pulse, 0, 6.2832);
+        ctx.fillStyle = col.node; ctx.globalAlpha = 0.16 + 0.25 * pulse; ctx.fill(); ctx.globalAlpha = 1;
+      }
+      ctx.fillStyle = col.node;
+      roundRect(nx - 11, ny - 11, 22, 22, 5); ctx.fill();
+      ctx.fillStyle = col.surface; ctx.font = "600 12px " + cv("--font-mono"); ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      ctx.fillText(LABELS[n], nx, ny + 1); ctx.textAlign = "left";
+    }
+
+    // event + estimate
+    if (ev) {
+      ctx.fillStyle = col.event; ctx.strokeStyle = col.surface; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(X(ev.x), Y(ev.y), 6, 0, 6.2832); ctx.fill(); ctx.stroke();
+    }
+    if (solved && calc.sol) {
+      var b = calc.sol.best;
+      ctx.strokeStyle = col.est; ctx.lineWidth = 2.5;
+      ctx.setLineDash([3, 3]); ctx.beginPath(); ctx.moveTo(X(ev.x), Y(ev.y)); ctx.lineTo(X(b.x), Y(b.y)); ctx.stroke(); ctx.setLineDash([]);
+      ring(X(b.x), Y(b.y), 12, col.est, false);
+      calc.sol.ghosts.forEach(function (gs) { ring(X(gs.x), Y(gs.y), 12, col.est, true); });
+    }
+  }
+  function ring(x, y, r, color, dashed) {
+    ctx.strokeStyle = color; ctx.lineWidth = 2.5;
+    if (dashed) ctx.setLineDash([4, 3]);
+    ctx.beginPath(); ctx.arc(x, y, r, 0, 6.2832); ctx.stroke(); ctx.setLineDash([]);
+    ctx.beginPath(); ctx.moveTo(x - r - 4, y); ctx.lineTo(x - r + 5, y); ctx.moveTo(x + r - 5, y); ctx.lineTo(x + r + 4, y);
+    ctx.moveTo(x, y - r - 4); ctx.lineTo(x, y - r + 5); ctx.moveTo(x, y + r - 5); ctx.lineTo(x, y + r + 4); ctx.stroke();
+  }
+  function roundRect(x, y, w, h, r) {
+    ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
+  }
+
+  // ---------- readout ----------
+  var elRows = document.getElementById("rows"), elNotes = document.getElementById("notes");
+  function fmtPos(p) { return "E " + Math.round(p.x) + " m, N " + Math.round(p.y) + " m"; }
+  function updateReadout(force) {
+    if (!calc) return;
+    var tt = phase === "solved" ? tEnd : t;
+    var heardCount = 0;
+    for (var i = 0; i < N; i++) if (phase === "solved" || tt >= calc.d[i] / C_TRUE) heardCount++;
+    if (!force && heardCount === lastHeard) return;
+    lastHeard = heardCount;
+    var html = "";
+    var first = Math.min.apply(null, calc.ts);
+    for (var n = 0; n < N; n++) {
+      var heard = phase === "solved" || tt >= calc.d[n] / C_TRUE;
+      html += "<tr><td>" + LABELS[n] + "</td><td>" + Math.round(calc.d[n]) + " m</td><td>" +
+        (heard ? calc.ts[n].toFixed(4) + " s" : "…") + "</td><td>" +
+        (heard ? ((calc.ts[n] - first) * 1000).toFixed(1) + " ms" : "…") + "</td></tr>";
+    }
+    elRows.innerHTML = html;
+    document.getElementById("rTrue").textContent = fmtPos(ev);
+    var rEst = document.getElementById("rEst"), rErr = document.getElementById("rErr"), notes = [];
+    if (phase !== "solved") {
+      rEst.textContent = "waiting for " + (N - heardCount) + " node" + (N - heardCount === 1 ? "" : "s") + "…";
+      rErr.textContent = "…"; rErr.className = "errval"; elNotes.innerHTML = ""; return;
+    }
+    if (!calc.sol) { rEst.textContent = "no solution"; rErr.textContent = "…"; rErr.className = "errval"; elNotes.innerHTML = ""; return; }
+    var b = calc.sol.best, err = Math.hypot(b.x - ev.x, b.y - ev.y);
+    rEst.textContent = fmtPos(b);
+    rErr.textContent = (err < 10 ? err.toFixed(1) : Math.round(err)) + " m";
+    rErr.className = "errval " + (err < 10 ? "good" : err < 40 ? "warn" : "bad");
+    if (calc.sol.ghosts.length) notes.push("<p>With 3 nodes there are two positions that fit these timings (dashed marker). Switch to 4 nodes to remove the ambiguity.</p>");
+    if (!insideHull(calc.hull, ev.x, ev.y)) notes.push("<p>This sound is outside the area covered by the nodes (dashed outline). Timing errors get stretched into larger position errors here. Put a node on this side to tighten it.</p>");
+    if (Math.abs(mis) >= 1) notes.push("<p class=\"info\">The solver is using the wrong speed of sound (about " + Math.abs(mis * 5.66).toFixed(0) + " °C off), which pulls the estimate away from the truth even with perfect timing.</p>");
+    elNotes.innerHTML = notes.join("");
+  }
+
+  // ---------- animation ----------
+  function startAnim() {
+    cancelAnimationFrame(raf);
+    if (reduced) { phase = "solved"; draw(); updateReadout(true); return; }
+    phase = "anim"; t = 0; last = performance.now(); lastHeard = -1;
+    updateReadout(true); raf = requestAnimationFrame(tick);
+  }
+  function tick(now) {
+    t += ((now - last) / 1000) * speed; last = now;
+    if (t >= tEnd) { phase = "solved"; draw(); updateReadout(true); return; }
+    draw(); updateReadout(false); raf = requestAnimationFrame(tick);
+  }
+  function showSolved() { cancelAnimationFrame(raf); phase = "solved"; compute(); draw(); updateReadout(true); }
+
+  // ---------- interaction ----------
+  function pos(e) { var r = canvas.getBoundingClientRect(); return { x: (e.clientX - r.left) * (size / r.width), y: (e.clientY - r.top) * (size / r.height) }; }
+  function world(p) { return { x: Math.max(0, Math.min(W, p.x / S)), y: Math.max(0, Math.min(W, (size - p.y) / S)) }; }
+  function nodeAt(p) {
+    for (var i = N - 1; i >= 0; i--) if (Math.hypot(p.x - X(nodes[i].x), p.y - Y(nodes[i].y)) < 17) return i;
+    return -1;
+  }
+  canvas.addEventListener("pointerdown", function (e) {
+    var p = pos(e), hit = nodeAt(p);
+    if (hit >= 0) { drag = hit; canvas.setPointerCapture(e.pointerId); canvas.style.cursor = "grabbing"; return; }
+    var w = world(p); ev = { x: w.x, y: w.y }; newNoise(); compute(); startAnim();
+  });
+  canvas.addEventListener("pointermove", function (e) {
+    var p = pos(e);
+    if (drag >= 0) { var w = world(p); nodes[drag].x = w.x; nodes[drag].y = w.y; showSolved(); return; }
+    canvas.style.cursor = nodeAt(p) >= 0 ? "grab" : "crosshair";
+  });
+  function endDrag() { drag = -1; canvas.style.cursor = "crosshair"; }
+  canvas.addEventListener("pointerup", endDrag);
+  canvas.addEventListener("pointercancel", endDrag);
+
+  function press(group, attr, val) {
+    group.querySelectorAll("button").forEach(function (b) { b.setAttribute("aria-pressed", b.getAttribute(attr) === String(val) ? "true" : "false"); });
+  }
+  var nseg = document.getElementById("nseg"), kseg = document.getElementById("kseg");
+  nseg.addEventListener("click", function (e) {
+    var b = e.target.closest("button"); if (!b) return;
+    N = parseInt(b.getAttribute("data-n"), 10); press(nseg, "data-n", N); showSolved();
+  });
+  var sg = document.getElementById("sigma"), sgOut = document.getElementById("sigmaOut");
+  function setSigma(v) { sigma = v; sg.value = v; sgOut.textContent = v.toFixed(1) + " ms ≈ " + (v * 34.3).toFixed(0) + " cm"; }
+  kseg.addEventListener("click", function (e) {
+    var b = e.target.closest("button"); if (!b) return;
+    var k = b.getAttribute("data-k"); press(kseg, "data-k", k); setSigma(k === "gun" ? 0.3 : 4); showSolved();
+  });
+  sg.addEventListener("input", function () { setSigma(parseFloat(sg.value)); kseg.querySelectorAll("button").forEach(function (b) { b.setAttribute("aria-pressed", "false"); }); showSolved(); });
+  var ms = document.getElementById("mis"), msOut = document.getElementById("misOut");
+  ms.addEventListener("input", function () { mis = parseFloat(ms.value); msOut.textContent = (mis > 0 ? "+" : "") + mis.toFixed(1) + " % ≈ " + Math.abs(mis * 5.66).toFixed(0) + " °C"; showSolved(); });
+  document.getElementById("spd").addEventListener("change", function (e) { speed = parseFloat(e.target.value); });
+  document.getElementById("replay").addEventListener("click", function () { newNoise(); compute(); startAnim(); });
+
+  function fit() {
+    var w = canvas.parentElement.clientWidth || 600;
+    dpr = Math.min(window.devicePixelRatio || 1, 2);
+    size = Math.round(w);
+    canvas.width = Math.round(size * dpr); canvas.height = Math.round(size * dpr);
+    S = size / W;
+    draw();
+  }
+  if (window.ResizeObserver) new ResizeObserver(fit).observe(canvas.parentElement); else window.addEventListener("resize", fit);
+  if (window.matchMedia) window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", function () { draw(); });
+  new MutationObserver(function () { draw(); }).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(function () { draw(); });
+
+  setSigma(0.3);
+  msOut.textContent = "0.0 % ≈ 0 °C";
+  compute(); fit(); updateReadout(true);
+})();
+</script>
+
+</body></html>
