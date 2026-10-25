@@ -1,0 +1,8 @@
+Item,Quantity for multi-node field prototype,Notes / status
+Nordic nRF54LM20 DK,3-4 total (including first DK),REQUIRED primary development platform; verify exact physical SoC revision and Edge AI/NPU support
+PDM digital MEMS microphone breakout,1 per sensor node,Must provide PDM clock/data at compatible logic levels; select exact part after checking board pins and acoustic requirements
+USB data cable and host computer,1 for development,Use to program/debug DK and capture logs
+Battery pack or regulated supply,1 per deployed node,Choose voltage/regulator for the DK input specification and measured peak current
+Weatherproof enclosure and acoustic windscreen,1 per deployed node,Must protect electronics without obstructing microphone sound
+Optional external storage,As required,First prototype may use buffers/existing DK external flash; confirm capacity and write strategy
+Calibration sound source / reference recorder,1 shared test setup,For controlled repeatable validation; safe non-hazardous test sounds only
